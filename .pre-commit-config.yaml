@@ -1,0 +1,12 @@
+repos:
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.28.3
+    hooks:
+      - id: golangci-lint
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: master
+    hooks:
+      - id: go-fmt
+      - id: go-mod-tidy
+
+exclude: ^(vendor|third_party)/
