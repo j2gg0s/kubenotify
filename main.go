@@ -1,245 +1,121 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
 	"regexp"
-	"strconv"
-	"strings"
 	"syscall"
-	"time"
+
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
 	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/j2gg0s/kubenotify/pkg/util"
-	"github.com/r3labs/diff"
-	"github.com/rs/zerolog/log"
+	"github.com/j2gg0s/kubenotify/pkg/k8s"
+	service "github.com/j2gg0s/kubenotify/pkg/service/kubenotify"
 )
-
-var _ = cache.Controller(&Controller{})
-
-type Controller struct{}
-
-func (c *Controller) Run(stopCh <-chan struct{}) {
-}
-
-func (c *Controller) HasSynced() bool {
-	return true
-}
-
-func (c *Controller) LastSyncResourceVersion() string {
-	return ""
-}
 
 var (
-	deployments = map[string]*apps.Deployment{}
+	resources = []string{"deployments", "configmaps"}
+	excludes  = []string{
+		"metadata.*",
+		"status.*",
+	}
+	extraExcludes = []string{}
+
+	webhook = ""
 )
 
-func Run() {
-	var kubeClient kubernetes.Interface
-	if _, err := rest.InClusterConfig(); err != nil {
-		kubeClient = util.GetClientOutOfCluster()
-	} else {
-		kubeClient = util.GetClient()
+func NewResourceController(
+	resource string,
+	kubeClient kubernetes.Interface,
+	notifyFunc service.NotifyFunc,
+	excludes ...*regexp.Regexp,
+) (cache.Controller, error) {
+	var restClient rest.Interface
+	var object runtime.Object
+	switch resource {
+	case "configmaps":
+		restClient = kubeClient.CoreV1().RESTClient()
+		object = &core.ConfigMap{}
+	case "deployments":
+		restClient = kubeClient.AppsV1().RESTClient()
+		object = &apps.Deployment{}
+	case "daemonsets":
+		restClient = kubeClient.AppsV1().RESTClient()
+		object = &apps.DaemonSet{}
+	case "statefulsets":
+		restClient = kubeClient.AppsV1().RESTClient()
+		object = &apps.StatefulSet{}
+	default:
+		return nil, fmt.Errorf("unsupport resource: %s", resource)
 	}
 
-	resource := &DeploymentResource{}
-
 	_, ctl := cache.NewInformer(
-		cache.NewListWatchFromClient(kubeClient.AppsV1().RESTClient(), "deployments", "", fields.Everything()),
-		&apps.Deployment{},
+		cache.NewListWatchFromClient(restClient, resource, "", fields.Everything()),
+		object,
 		0,
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				if err := Add(obj, resource); err != nil {
-					log.Err(err).Send()
-					return
-				}
-			},
-			UpdateFunc: func(oldObj, obj interface{}) {
-				if err := Add(obj, resource); err != nil {
-					log.Err(err).Send()
-					return
-				}
-			},
-			DeleteFunc: func(obj interface{}) {
-				if err := Del(obj, resource); err != nil {
-					log.Err(err).Send()
-					return
-				}
-			},
-		},
+		service.NewEventHandler(notifyFunc, excludes...),
 	)
 
-	stopCh := make(chan struct{})
-	go ctl.Run(stopCh)
-	defer close(stopCh)
-
-	sigterm := make(chan os.Signal, 1)
-	signal.Notify(sigterm, syscall.SIGTERM)
-	signal.Notify(sigterm, syscall.SIGINT)
-	<-sigterm
+	return ctl, nil
 }
 
 func main() {
-	Run()
-}
-
-type Resource interface {
-	Key(obj interface{}) string
-	Get(obj interface{}) (interface{}, bool)
-	Set(obj interface{})
-	Del(obj interface{})
-
-	GetVersion(obj interface{}) int
-	GetCreationTimestamp(obj interface{}) time.Time
-	ShouldIgnore(path string) bool
-}
-
-type DeploymentResource struct {
-}
-
-func (r DeploymentResource) Key(obj interface{}) string {
-	key, err := cache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		log.Warn().Err(err).Msgf("get name of resource with error: %v", obj)
-		return ""
+	cmd := cobra.Command{
+		Use: "kubenotify",
 	}
-	return key
-}
 
-func (r DeploymentResource) Get(obj interface{}) (interface{}, bool) {
-	obj, ok := deployments[r.Key(obj)]
-	if !ok {
-		return nil, false
-	}
-	return obj, true
-}
+	cmd.PersistentFlags().StringSliceVar(&resources, "resources", resources, "The resource to watch")
+	cmd.PersistentFlags().StringSliceVar(&excludes, "set-excludes", excludes, "The field should be exclude, clean and set")
+	cmd.PersistentFlags().StringSliceVar(&extraExcludes, "add-excludes", extraExcludes, "The field should be exclude, add")
+	cmd.PersistentFlags().StringVar(&webhook, "webhook", webhook, "The url of webhook")
 
-func (r DeploymentResource) Set(obj interface{}) {
-	deployments[r.Key(obj)] = obj.(*apps.Deployment)
-}
-
-func (r DeploymentResource) Del(obj interface{}) {
-	delete(deployments, r.Key(obj))
-}
-
-func (r DeploymentResource) GetVersion(obj interface{}) int {
-	version := obj.(*apps.Deployment).ResourceVersion
-	i, err := strconv.Atoi(version)
-	if err != nil {
-		log.Warn().Err(err).Msgf("convert version to int with error: %s", version)
-		return -1
-	}
-	return i
-}
-
-func (r DeploymentResource) GetCreationTimestamp(obj interface{}) time.Time {
-	return obj.(*apps.Deployment).CreationTimestamp.Time
-}
-
-var excludes = []string{
-	"ObjectMeta.ResourceVersion",
-	"ObjectMeta.Annotations.deployment.kubernetes.io/revision",
-	"ObjectMeta.Generation",
-	"Status.*",
-}
-
-func (r DeploymentResource) ShouldIgnore(path string) bool {
-	for _, exclude := range excludes {
-		if regexp.MustCompile(exclude).MatchString(path) {
-			return true
+	cmd.RunE = func(*cobra.Command, []string) error {
+		if len(resources) == 0 {
+			return fmt.Errorf("you should watch at least one resource")
 		}
-	}
-	return false
-}
+		excludes = append(excludes, extraExcludes...)
 
-func Add(obj interface{}, resource Resource) error {
-	version := resource.GetVersion(obj)
-
-	var left, right interface{}
-	if v, ok := resource.Get(obj); ok {
-		currVersion := resource.GetVersion(v)
-		if currVersion < version {
-			left, right = v, obj
-		} else {
-			left, right = obj, v
+		rExcludes := make([]*regexp.Regexp, 0, len(excludes)+len(extraExcludes))
+		for _, exclude := range append(excludes, extraExcludes...) {
+			reg, err := regexp.Compile(exclude)
+			if err != nil {
+				return fmt.Errorf("compile regex %s with error: %w", exclude, err)
+			}
+			rExcludes = append(rExcludes, reg)
 		}
-	} else {
-		left, right = nil, obj
-	}
-	resource.Set(obj)
 
-	return Notify(left, right, resource)
-}
-
-func Del(obj interface{}, resource Resource) error {
-	version := resource.GetVersion(obj)
-
-	var left, right interface{}
-	if v, ok := resource.Get(obj); ok {
-		currVersion := resource.GetVersion(v)
-		if currVersion < version {
-			left, right = v, nil
-		} else {
-			left, right = obj, v
+		kubeClient := k8s.NewClient()
+		notifyFunc := service.WebhookNotify(webhook)
+		for _, resource := range resources {
+			ctl, err := NewResourceController(
+				resource, kubeClient, notifyFunc, rExcludes...)
+			if err != nil {
+				return err
+			}
+			stopCh := make(chan struct{})
+			go ctl.Run(stopCh)
+			defer close(stopCh)
 		}
-	} else {
-		left, right = obj, nil
-	}
-	if right == nil {
-		resource.Del(right)
-	}
 
-	return Notify(left, right, resource)
-}
+		sigterm := make(chan os.Signal, 1)
+		signal.Notify(sigterm, syscall.SIGTERM)
+		signal.Notify(sigterm, syscall.SIGINT)
+		<-sigterm
 
-func Notify(left, right interface{}, resource Resource) error {
-	if left == nil {
-		if time.Since(resource.GetCreationTimestamp(right)) > time.Minute {
-			log.Debug().Msgf("ignore resource created before %s", "1m")
-			return nil
-		}
-		msgf("resource create: %s", resource.Key(right))
 		return nil
 	}
 
-	if right == nil {
-		msgf("resource delete: %s", resource.Key(left))
-		return nil
+	if err := cmd.Execute(); err != nil {
+		log.Err(err).Send()
 	}
-
-	changes, err := diff.Diff(left, right)
-	if err != nil {
-		return fmt.Errorf("diff with error: %w", err)
-	}
-
-	notify := []diff.Change{}
-	for _, change := range changes {
-		paths := strings.Join(change.Path, ".")
-		if resource.ShouldIgnore(paths) {
-			continue
-		}
-		notify = append(notify, change)
-	}
-
-	if len(notify) > 0 {
-		if b, err := json.MarshalIndent(notify, "", "  "); err != nil {
-			return fmt.Errorf("json marshal with error: %w", err)
-		} else {
-			msgf("resource update: %s", string(b))
-		}
-	}
-	return nil
-}
-
-func msgf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }
