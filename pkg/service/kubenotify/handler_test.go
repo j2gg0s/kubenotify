@@ -24,7 +24,7 @@ func ExampleDeployment() {
 	}
 	defer f.Close()
 
-	handler := NewEventHandler(Stderr(), excludes...)
+	handler := NewEventHandler(StdoutNotify(), excludes...)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		obj := &apps.Deployment{}
@@ -44,7 +44,7 @@ func ExampleConfigMap() {
 	}
 	defer f.Close()
 
-	handler := NewEventHandler(Stderr(), excludes...)
+	handler := NewEventHandler(StdoutNotify(), excludes...)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		obj := &core.ConfigMap{}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/r3labs/diff"
 	"github.com/rs/zerolog/log"
@@ -124,12 +125,16 @@ func (h resourceEventHandler) del(obj Resource) error {
 }
 
 func (h resourceEventHandler) notify(left, right *Resource) error {
-	if right == nil {
-		return h.notifyFunc(newEvent("create", left))
+	if left == nil {
+		if time.Since(right.CreationTimestamp.Time) > time.Minute {
+			log.Debug().Interface("create", right.obj).Msgf("ignore resoruce created before %s", "1m")
+			return nil
+		}
+		return h.notifyFunc(newEvent("create", right))
 	}
 
-	if left == nil {
-		return h.notifyFunc(newEvent("delete", right))
+	if right == nil {
+		return h.notifyFunc(newEvent("delete", left))
 	}
 
 	var err error
@@ -178,7 +183,7 @@ func (h resourceEventHandler) notify(left, right *Resource) error {
 		changes = append(changes, change)
 	}
 	if len(changes) == 0 {
-		log.Debug().Msgf("ignore event[%s]", right.GetIdentify())
+		log.Debug().Interface("raw", raw).Msgf("ignore event[%s]", right.GetIdentify())
 		return nil
 	}
 

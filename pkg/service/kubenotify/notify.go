@@ -23,12 +23,12 @@ func WebhookNotify(webhook string) NotifyFunc {
 	}
 }
 
-func Stderr() NotifyFunc {
+func StdoutNotify() NotifyFunc {
 	return func(event Event) error {
 		if b, err := json.MarshalIndent(event, "", "  "); err != nil {
 			return fmt.Errorf("marshal event with error: %w", err)
 		} else {
-			fmt.Fprintln(os.Stderr, string(b))
+			fmt.Fprintln(os.Stdout, string(b))
 		}
 		return nil
 	}

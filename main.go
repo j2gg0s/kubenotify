@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"syscall"
 
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
@@ -21,17 +22,6 @@ import (
 
 	"github.com/j2gg0s/kubenotify/pkg/k8s"
 	service "github.com/j2gg0s/kubenotify/pkg/service/kubenotify"
-)
-
-var (
-	resources = []string{"deployments", "configmaps"}
-	excludes  = []string{
-		"metadata.*",
-		"status.*",
-	}
-	extraExcludes = []string{}
-
-	webhook = ""
 )
 
 func NewResourceController(
@@ -69,6 +59,17 @@ func NewResourceController(
 	return ctl, nil
 }
 
+var (
+	resources = []string{"deployments", "configmaps", "daemonsets", "statefulsets"}
+	excludes  = []string{
+		"metadata.*",
+		"status.*",
+	}
+	extraExcludes = []string{}
+	webhook       = ""
+	debug         = false
+)
+
 func main() {
 	cmd := cobra.Command{
 		Use: "kubenotify",
@@ -78,8 +79,15 @@ func main() {
 	cmd.PersistentFlags().StringSliceVar(&excludes, "set-excludes", excludes, "The field should be exclude, clean and set")
 	cmd.PersistentFlags().StringSliceVar(&extraExcludes, "add-excludes", extraExcludes, "The field should be exclude, add")
 	cmd.PersistentFlags().StringVar(&webhook, "webhook", webhook, "The url of webhook")
+	cmd.PersistentFlags().BoolVar(&debug, "debug", debug, "enable debug log")
 
 	cmd.RunE = func(*cobra.Command, []string) error {
+		if debug {
+			zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		} else {
+			zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		}
+
 		if len(resources) == 0 {
 			return fmt.Errorf("you should watch at least one resource")
 		}
@@ -95,7 +103,10 @@ func main() {
 		}
 
 		kubeClient := k8s.NewClient()
-		notifyFunc := service.WebhookNotify(webhook)
+		notifyFunc := service.StdoutNotify()
+		if len(webhook) > 0 {
+			notifyFunc = service.WebhookNotify(webhook)
+		}
 		for _, resource := range resources {
 			ctl, err := NewResourceController(
 				resource, kubeClient, notifyFunc, rExcludes...)
