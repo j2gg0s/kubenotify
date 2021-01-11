@@ -66,7 +66,7 @@ var (
 		"status.*",
 	}
 	extraExcludes = []string{}
-	webhook       = ""
+	webhooks      = []string{}
 	debug         = false
 )
 
@@ -78,7 +78,7 @@ func main() {
 	cmd.PersistentFlags().StringSliceVar(&resources, "resources", resources, "The resource to watch")
 	cmd.PersistentFlags().StringSliceVar(&excludes, "set-excludes", excludes, "The field should be exclude, clean and set")
 	cmd.PersistentFlags().StringSliceVar(&extraExcludes, "add-excludes", extraExcludes, "The field should be exclude, add")
-	cmd.PersistentFlags().StringVar(&webhook, "webhook", webhook, "The url of webhook")
+	cmd.PersistentFlags().StringSliceVar(&webhooks, "webhooks", webhooks, "The urls of webhook")
 	cmd.PersistentFlags().BoolVar(&debug, "debug", debug, "enable debug log")
 
 	cmd.RunE = func(*cobra.Command, []string) error {
@@ -104,8 +104,8 @@ func main() {
 
 		kubeClient := k8s.NewClient()
 		notifyFunc := service.StdoutNotify()
-		if len(webhook) > 0 {
-			notifyFunc = service.WebhookNotify(webhook)
+		if len(webhooks) > 0 {
+			notifyFunc = service.WebhooksNotify(webhooks)
 		}
 		for _, resource := range resources {
 			ctl, err := NewResourceController(

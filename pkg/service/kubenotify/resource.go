@@ -57,6 +57,11 @@ func NewResource(obj interface{}) (*Resource, error) {
 }
 
 func isLess(left, right Resource) bool {
+	// NOTE: 什么情况下会没有
+	if left.ResourceVersion == "" || right.ResourceVersion == "" {
+		return false
+	}
+
 	x, err := strconv.Atoi(left.GetResourceVersion())
 	if err != nil {
 		log.Warn().Err(err).Msgf("convert ResourceVersion[%s] to int with error", left.GetResourceVersion())

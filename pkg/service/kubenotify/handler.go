@@ -118,8 +118,10 @@ func (h resourceEventHandler) del(obj Resource) error {
 		}
 	}
 
-	if err := h.store.Delete(*left); err != nil {
-		log.Err(err).Msgf("delete object from store with error")
+	if left != nil {
+		if err := h.store.Delete(*left); err != nil {
+			log.Err(err).Msgf("delete object from store with error")
+		}
 	}
 	return h.notify(left, right)
 }
