@@ -39,7 +39,7 @@ func NewResource(obj interface{}) (*Resource, error) {
 	case core.ConfigMap:
 		typeMeta = v.TypeMeta
 		objectMeta = v.ObjectMeta
-	case *core.ConfigMap:
+	case *apps.StatefulSet:
 		typeMeta = v.TypeMeta
 		objectMeta = v.ObjectMeta
 	case apps.Deployment:
