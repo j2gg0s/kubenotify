@@ -22,4 +22,4 @@ WORKDIR /go/bin
 
 COPY --chown=0:0 --from=build /src/app /go/bin/app
 
-CMD ["./app"]
+ENTRYPOINT ["./app"]

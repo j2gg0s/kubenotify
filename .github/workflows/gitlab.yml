@@ -1,0 +1,36 @@
+name: Push to gitlab
+
+env:
+  GITLAB: git@gitlab.com:j2gg9s/kubenotify.git
+
+on:
+  push:
+    branches:
+      - debug-ci
+      - master
+      - dev
+
+jobs:
+  mirror-gitlab:
+    name: push project to gitlab
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: '0'
+
+    - name: add rsa
+      env:
+        RSA: ${{ secrets.RSA }}
+      run: mkdir ~/.ssh && echo $RSA | base64 -d > ~/.ssh/id_rsa && chmod 0400 ~/.ssh/id_rsa
+
+    - name: ignore host
+      run: git config --global core.sshCommand 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+
+    - name: add remote
+      run: GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" git remote add gm $GITLAB
+
+    - name: push
+      run: GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" git push gm

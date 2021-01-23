@@ -1,4 +1,4 @@
-package kubenotify
+package notify
 
 import (
 	"encoding/json"

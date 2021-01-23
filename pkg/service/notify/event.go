@@ -1,4 +1,4 @@
-package kubenotify
+package notify
 
 import (
 	"github.com/r3labs/diff"
