@@ -1,0 +1,55 @@
+variables:
+  RELEASE: wakaexporter
+  NAMESPACE: monitor
+
+  CHART: j2gg0s/api
+  CHART_VERSION: 0.3.1
+  CHART_ALIAS: j2gg0s
+  CHART_REPO: https://j2gg0s.gitlab.io/chart
+
+  IMAGE_REGISTRY: registry.cn-huhehaote.aliyuncs.com
+  IMAGE_NAMESPACE: j2gg0s
+  IMAGE_NAME: default
+
+  KUBECONFIG: /etc/kubeconfig.yaml
+
+build:
+  stage: build
+
+  image: docker:20
+  services:
+    - docker:20-dind
+
+  before_script:
+    - export IMAGE_TAG=$RELEASE-$CI_COMMIT_SHORT_SHA
+    - export IMAGE=$IMAGE_REGISTRY/$IMAGE_NAMESPACE/$IMAGE_NAME
+
+    - export DOCKER_TLS_CERTDIR=/certs
+    - docker login -u $G_DOCKER_USER $IMAGE_REGISTRY -p $G_DOCKER_PWD
+
+  script:
+    - docker build -t $IMAGE:$IMAGE_TAG .
+    - docker push $IMAGE:$IMAGE_TAG
+
+  only:
+    - master
+
+deploy:
+  stage: deploy
+
+  image:
+    name: alpine/helm:3.4.2
+    entrypoint: ["/bin/sh", "-c"]
+
+  before_script:
+    - export IMAGE_TAG=$RELEASE-$CI_COMMIT_SHORT_SHA
+    - export IMAGE=$IMAGE_REGISTRY/$IMAGE_NAMESPACE/$IMAGE_NAME
+
+    - echo $G_KUBE_CONFIG | base64 -d > $KUBECONFIG
+    - helm repo add $CHART_ALIAS $CHART_REPO
+
+  script:
+    - helm upgrade $RELEASE $CHART -n $NAMESPACE -i --kube-apiserver=$G_KUBE_SERVER --set "image.repository=$IMAGE" --set "image.tag=$IMAGE_TAG" --set "args[0]=notify" --set "args[1]=--webhook=$G_WEBHOOK"
+
+  only:
+    - master
