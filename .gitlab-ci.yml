@@ -33,6 +33,7 @@ build:
 
   only:
     - master
+    - debug-ci
 
 deploy:
   stage: deploy
@@ -53,3 +54,4 @@ deploy:
 
   only:
     - master
+    - debug-ci
