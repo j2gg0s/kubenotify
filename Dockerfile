@@ -13,7 +13,6 @@ COPY . .
 
 RUN go build -o app main.go
 
-
 FROM alpine:3
 
 RUN apk update && apk update ca-certificates
