@@ -40,7 +40,8 @@ var (
 
 func main() {
 	root := cobra.Command{
-		Use: "kubenotify",
+		Use:  "kubenotify",
+		Long: "subscribe kubernetes workload change event, support Deployment, StatefulSet and DaemonSet",
 	}
 
 	root.PersistentFlags().BoolVar(&debug, "debug", debug, "enable debug log")
