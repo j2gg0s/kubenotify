@@ -52,8 +52,9 @@ func WebhooksNotify(addrs []string) NotifyFunc {
 	return func(msg string) error {
 		group := wait.Group{}
 		for _, hook := range hooks {
+			hookFunc := hook
 			group.Start(func() {
-				if err := hook(msg); err != nil {
+				if err := hookFunc(msg); err != nil {
 					log.Warn().Err(err).Msgf("ignore notify %s", msg)
 				}
 			})
