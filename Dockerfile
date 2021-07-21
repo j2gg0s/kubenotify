@@ -1,8 +1,9 @@
-FROM golang:1.15-alpine as build
+FROM golang:1.15 as build
 
-ENV GOARCH=amd64
+ENV GOARCH=amd64 \
+    CGO_ENABLED=0
 
-WORKDIR /src
+WORKDIR /go/src
 
 COPY go.sum .
 COPY go.mod .
@@ -15,10 +16,14 @@ RUN go build -o app main.go
 
 FROM alpine:3
 
-RUN apk update && apk update ca-certificates
+RUN set -ex && \
+    apk --no-cache --update add \
+        ca-certificates \
+        wget \
+        tzdata
 
 WORKDIR /go/bin
 
-COPY --chown=0:0 --from=build /src/app /go/bin/app
+COPY --chown=0:0 --from=build /go/src/app /go/bin/app
 
 ENTRYPOINT ["./app"]
