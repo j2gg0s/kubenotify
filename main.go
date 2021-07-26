@@ -28,6 +28,7 @@ var (
 	excludes = []string{
 		`metadata\.[acdfgmors].*`,
 		`status\..*`,
+		`spec\.template\.spec\.containers\.[123456789]`,
 	}
 	includes          = []string{}
 	webhooks          = []string{}
