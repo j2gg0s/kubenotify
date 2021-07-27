@@ -29,6 +29,8 @@ var (
 		`metadata\.[acdfgmors].*`,
 		`status\..*`,
 		`spec\.template\.spec\.containers\.[123456789]`,
+		// jaeger injected
+		`metadata\.labels\.sidecar\.jaegertracing\.io\/injected`,
 	}
 	includes          = []string{}
 	webhooks          = []string{}
